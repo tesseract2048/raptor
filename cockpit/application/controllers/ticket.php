@@ -14,32 +14,30 @@ class Ticket extends CI_Controller {
     public function fulfill() {
         $number = $this->input->get_post('number');
         $success = FALSE;
+        $reason = 'NO_ERROR';
         $this->db->trans_begin();
         $ticket = $this->read_ticket($number, TRUE);
         if ($ticket) {
-            $to = $this->input->get_post('to');
-            $area = $this->input->get_post('area');
-            $this->db->where('number', $number)->update('ticket', array('state' => 1, 'fulfill_time' => time()));
-            $this->db->insert('job', array(
-                'create_time' => time(),
-                'commit_time' => 0,
-                'ticket_number' => $ticket['number'],
-                'to' => $to,
-                'area' => $area,
-                'locking_on' => NULL,
-                'retried' => 0,
-                'result' => 0,
-                'reason' => NULL
-            ));
-            $success = TRUE;
+            $values = array();
+            foreach ($ticket['fields'] as $key=>$field) {
+                $values[$key] = $this->input->get_post($key);
+            }
+            $ret = make_job($ticket, $values);
+            if ($ret == 'SUCCESS') {
+                $this->db->where('number', $number)->update('ticket', array('state' => 1, 'fulfill_time' => time()));
+                $success = TRUE;
+            } else {
+                $reason = $ret;
+            }
         }
         if ($this->db->trans_status() === FALSE) {
             $this->db->trans_rollback();
             $success = FALSE;
+            $reason = 'TRANSACTION_FAILED';
         } else {
             $this->db->trans_commit();
         }
-        echo json_encode(array('success' => $success));
+        echo json_encode(array('success' => $success, 'reason' => $reason));
     }
 
 	public function create($product, $count) {
@@ -58,26 +56,9 @@ class Ticket extends CI_Controller {
 		echo json_encode(array('product' => $product, 'number' => $number));
 	}
 
-    private function get_fields($product_id, $subcate) {
-        $fields = array();
-        $areas = $this->db->select(array('id', 'name'))->get_where('area', array('product_id' => $product_id, 'state' => 0))->result_array();
-        if (count($areas) > 0) {
-            $fields['area'] = array(
-                'text' => '服务区',
-                'type' => 'select',
-                'items' => $areas
-            );
-        }
-        $subcate = $this->db->get_where('subcate', array('id' => $subcate))->row_array();
-        $fields['to'] = array(
-            'text' => $subcate['target_name'],
-            'type' => 'text'
-        );
-        return $fields;
-    }
-
     private function read_ticket($number, $lock = FALSE) {
         $this->load->helper('ticket');
+        $this->load->helper('product');
         if (!valid_ticket_number($number)) {
             return FALSE;
         }
@@ -93,7 +74,7 @@ class Ticket extends CI_Controller {
         }
         $product = $this->db->get_where('product', array('id' => $ticket['product_id']))->row_array();
         $ticket['product'] = $product;
-        $ticket['fields'] = $this->get_fields($product['id'], $product['subcate']);
+        $ticket['fields'] = get_product_fields($product);
         return $ticket;
     }
 

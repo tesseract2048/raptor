@@ -39,7 +39,7 @@ class Worker:
 
     def fulfill(self, job):
         orderid = "%sv%sv%s" % (job['ticket']['number'], job['id'], job['retried'])
-        productid = job['ticket']['product_id']
+        productid = job['product_id']
         to = job['to']
         area = job['area']
         count = job['ticket']['count']

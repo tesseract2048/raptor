@@ -1,38 +1,93 @@
 <?php if ( ! defined('BASEPATH')) exit('No direct script access allowed');
 
-define('TICKET_NUMBER_MAGIC', 42949);
-
-function new_ticket_number($product) {
-    $alpha = mt_rand(0, 99999);
-    $beta = mt_rand(0, 99999);
-    $chk1 = (($alpha + $beta) ^ TICKET_NUMBER_MAGIC) % 100;
-    $chk2 = (($product * $alpha) ^ TICKET_NUMBER_MAGIC) % 100;
-    $number = sprintf("T%04d%05d%02d%05d%02d", $product, $alpha, $chk1, $beta, $chk2);
-    return $number;
+function get_areas($product_id) {
+    $CI =& get_instance();
+    $areas = $CI->db->select(array('id', 'name'))->get_where('area', array('product_id' => $product_id, 'state' => 0))->result_array();
+    return $areas;
 }
 
-function valid_ticket_number($number) {
-    if (strlen($number) != 19) {
-        return FALSE;
+function get_subcate($subcate) {
+    $CI =& get_instance();
+    $subcate = $CI->db->get_where('subcate', array('id' => $subcate))->row_array();
+    return $subcate;
+}
+
+function get_product_fields($product) {
+    $fields = array();
+    $areas = get_areas($product['id']);
+    if (count($areas) > 0) {
+        $fields['area'] = array(
+            'text' => '服务区',
+            'type' => 'select',
+            'items' => $areas
+        );
     }
-    $prefix = substr($number, 0, 1);
-    if ($prefix != 'T') {
-        return FALSE;
+    $subcate = get_subcate($product['subcate']);
+    if ($subcate['target_name']) {
+        $fields['to'] = array(
+            'text' => $subcate['target_name'],
+            'type' => 'text'
+        );
     }
-    $product = substr($number, 1, 4);
-    $alpha = intval(substr($number, 5, 5));
-    $chk1 = intval(substr($number, 10, 2));
-    $beta = intval(substr($number, 12, 5));
-    $chk2 = intval(substr($number, 17, 2));
-    $real_chk1 = (($alpha + $beta) ^ TICKET_NUMBER_MAGIC) % 100;
-    $real_chk2 = (($product * $alpha) ^ TICKET_NUMBER_MAGIC) % 100;
-    if ($real_chk1 != $chk1) {
-        return FALSE;
+    return $fields;
+}
+
+function create_job($ticket, $values) {
+    $CI =& get_instance();
+    $product = $ticket['product'];
+    $to = $values['to'];
+    if ($product['cate'] == 4) {
+        $this->load->helper('user');
+        $user = get_user();
+        if (!$user) {
+            return 'LOGIN_REQUIRED';
+        }
+        // hack self business here
+        if ($product['subcate'] == 900) {
+            // increase balance
+            $this->db->set("credit_balance", "credit_balance + " . $product['norm_value'])->where('name', $username)->update('agent');
+        }
+        if ($product['subcate'] == 910) {
+            // upgrade agent
+            $from = $product['province'] % 10;
+            $to = int($product['province'] / 10);
+            if ($user['level'] != $from) {
+                return 'INVALID_CURRENT_LEVEL';
+            }
+            $this->db->update('agent', array('level' => $to), array('name' => $username));
+        }
     }
-    if ($real_chk2 != $chk2) {
-        return FALSE;
+    else {
+        $this->db->insert('job', array(
+            'create_time' => time(),
+            'commit_time' => 0,
+            'ticket_number' => $ticket['number'],
+            'to' => $values['to'],
+            'area' => $values['area'],
+            'product_id' => $product['id'],
+            'locking_on' => NULL,
+            'retried' => 0,
+            'result' => 0,
+            'reason' => NULL
+        ));
     }
-    return TRUE;
+    return 'SUCCESS';
+}
+
+function make_job($ticket, $values) {
+    $CI =& get_instance();
+    $product = $ticket['product'];
+    $to = $values['to'];
+    if ($product['cate'] == 1 && (!is_numeric($to) || strlen($to) != 11)) {
+        return 'INVALID_NUMBER';
+    }
+    if ($product['cate'] == 2 && (!is_numeric($to) || strlen($to) < 5)) {
+        return 'INVALID_NUMBER';
+    }
+    if ($product['cate'] == 3 && !$to) {
+        return 'INVALID_NUMBER';
+    }
+    return create_job($ticket, $values);
 }
 
 /* End of file */
