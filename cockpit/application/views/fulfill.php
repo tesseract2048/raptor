@@ -89,6 +89,7 @@ $('#btn-fulfill').click(function() {
     }, "json");
 });
 $('#number').keyup(check_number);
+$('#tab-ticket').addClass('active');
 </script>
 
 <?php $this->load->view('footer'); ?>

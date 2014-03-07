@@ -1,10 +1,21 @@
 <?php if ( ! defined('BASEPATH')) exit('No direct script access allowed');
 
-class Ticket extends CI_Controller {
+class Agent extends CI_Controller {
 
     public function __construct() {
         parent::__construct();
         $this->load->library('Session');
+        $this->load->helper('user');
+    }
+
+    public function index() {
+        $user = get_user();
+        if (!$user) {
+            $this->load->view('agent_logging');
+        } else {
+            $this->load->vars('user', $user);
+            $this->load->view('agent_control');
+        }
     }
 
     private function check_login($name, $password) {
@@ -30,6 +41,41 @@ class Ticket extends CI_Controller {
         } else {
             echo json_encode(array('success' => 0));
         }
+    }
+
+    public function changepwd() {
+        $current_password = $this->input->get_post('current_password');
+        $new_password = $this->input->get_post('new_password');
+        $user = get_user();
+        if (!$user) {
+            echo json_encode(array('success' => 0));
+            return;
+        }
+        if ($user['passhash'] != md5($current_password)) {
+            echo json_encode(array('success' => 0));
+            return;
+        }
+        $this->db->update('agent', array('passhash' => md5($new_password)), array('name' => $user['name']));
+        echo json_encode(array('success' => 1));
+    }
+
+    public function status() {
+        $user = get_user();
+        if (!$user) {
+            echo json_encode(array('success' => 0));
+            return;
+        }
+        echo json_encode(array('name' => $user['name'], 'success' => 1, 'code' => $user['code'], 'level' => $user['level'], 'balance' => $user['credit_balance']));
+    }
+
+    public function log($page=0) {
+        $user = get_user();
+        if (!$user) {
+            echo json_encode(array('success' => 0));
+            return;
+        }
+        $logs = $this->db->where('agent', $user['id'])->order_by('time', 'DESC')->limit(50, $page*50)->get('creditlog')->result_array();
+        echo json_encode(array('success' => 1, 'logs' => $logs));
     }
 
 }

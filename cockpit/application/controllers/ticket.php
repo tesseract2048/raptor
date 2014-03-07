@@ -30,10 +30,9 @@ class Ticket extends CI_Controller {
                 $reason = $ret;
             }
         }
-        if ($this->db->trans_status() === FALSE) {
+        if (!$success || $this->db->trans_status() === FALSE) {
             $this->db->trans_rollback();
             $success = FALSE;
-            $reason = 'TRANSACTION_FAILED';
         } else {
             $this->db->trans_commit();
         }

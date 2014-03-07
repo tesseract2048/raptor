@@ -12,6 +12,12 @@ function get_subcate($subcate) {
     return $subcate;
 }
 
+function get_price($product, $agent_level) {
+    $CI =& get_instance();
+    $price = $CI->db->get_where('price', array('product_id' => $product, 'agent_level' => $agent_level))->row_array();
+    return $price['stock_price'];
+}
+
 function get_product_fields($product) {
     $fields = array();
     $areas = get_areas($product['id']);
@@ -32,10 +38,26 @@ function get_product_fields($product) {
     return $fields;
 }
 
+function change_credit($user_id, $diff, $ticket_number) {
+    $CI =& get_instance();
+    $agent = get_user_by_id($user_id);
+    if ($agent['credit_balance'] + $diff < 0) {
+        return FALSE;
+    }
+    $new_balance = $agent['credit_balance'] + $diff;
+    $this->db->insert('creditlog', array('agent' => $agent['id'], 'diff' => $diff, 'balance' => $new_balance, 'ticket' => $ticket_number, 'time' => time()));
+    $this->db->update('agent', array('credit_balance' => $new_balance), array('id' => $agent['id']));
+}
+
 function create_job($ticket, $values) {
     $CI =& get_instance();
     $product = $ticket['product'];
     $to = $values['to'];
+    $agent = get_user_by_id($ticket['agent']);
+    $price = get_price($product['id'], $agent['level']);
+    if (!change_credit($agent['id'], -$price, $ticket['number'])) {
+        return 'INSUFFICIENT_BALANCE_FROM_AGENT';
+    }
     if ($product['cate'] == 4) {
         $this->load->helper('user');
         $user = get_user();
@@ -45,7 +67,7 @@ function create_job($ticket, $values) {
         // hack self business here
         if ($product['subcate'] == 900) {
             // increase balance
-            $this->db->set("credit_balance", "credit_balance + " . $product['norm_value'])->where('name', $username)->update('agent');
+            change_credit($user['id'], $product['norm_value'], $ticket['number']);
         }
         if ($product['subcate'] == 910) {
             // upgrade agent
@@ -54,7 +76,10 @@ function create_job($ticket, $values) {
             if ($user['level'] != $from) {
                 return 'INVALID_CURRENT_LEVEL';
             }
-            $this->db->update('agent', array('level' => $to), array('name' => $username));
+            if ($user['parent'] && $user['parent'] != $ticket['agent']) {
+                return 'PARENT_CONFLICTED';
+            }
+            $this->db->update('agent', array('level' => $to, 'parent' => $ticket['agent']), array('name' => $username));
         }
     }
     else {

@@ -1,3 +1,7 @@
+<?php
+$this->load->helper('user');
+$current_user = get_user();
+?>
 <!DOCTYPE html>
 <html lang="zh-cn">
 <head>
@@ -20,9 +24,16 @@
           <div class="inner">
             <h3 class="masthead-brand">RAPTOR</h3>
             <ul class="nav masthead-nav">
-              <li>frak</li>
-              <li><a href="#">用户中心</a></li>
-              <li class="active"><a href="#">即时提货</a></li>
+<?php
+if ($current_user) {?>
+              <li><?php echo $current_user['name'];?></li>
+              <li id="tab-control"><a href="#">用户中心</a></li>
+<?php
+} else {?>
+              <li id="tab-logging"><a href="<?php echo site_url('/agent');?>">登录</a></li>
+<?php
+}?>
+              <li id="tab-ticket"><a href="<?php echo site_url('/ticket');?>">即时提货</a></li>
               <li><a href="#">客户服务</a></li>
             </ul>
           </div>

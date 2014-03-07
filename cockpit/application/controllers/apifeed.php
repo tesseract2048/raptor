@@ -81,6 +81,14 @@ class Apifeed extends CI_Controller {
         }
     }
 
+    public function makeprice($level, $discount) {
+        $products = $this->db->get('product')->result_array();
+        foreach ($products as $product) {
+            $price = $product['stock_price'] * $discount;
+            $this->db->replace('price', array('product_id' => $product['id'], 'agent_level' => $level, 'stock_price' => $price));
+        }
+    }
+
 }
 
 /* End of file */
